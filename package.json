@@ -9,6 +9,7 @@
     "test": "node -e \"console.log('Testing serverless setup...'); require('./app'); console.log('✅ App loaded successfully');\""
   },
   "dependencies": {
+    "@aws-sdk/client-rekognition": "^3.908.0",
     "aws-sdk": "^2.1692.0",
     "axios": "^1.11.0",
     "bcryptjs": "^3.0.2",
