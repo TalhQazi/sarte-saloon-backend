@@ -329,11 +329,15 @@ exports.addAdmin = async (req, res) => {
     }
 
     // Generate sequential admin ID
-    const lastAdmin = await Admin.findOne().sort({ employeeId: -1 });
-    const adminNumber = lastAdmin
-      ? parseInt(lastAdmin.employeeId.replace("ADM", "")) + 1
-      : 1;
+     const lastAdmin = await Admin.findOne().sort({ adminId: -1 }).lean;
+
+let adminNumber = 1;
+if (lastAdmin && lastAdmin.adminId) {
+  const match = lastAdmin.adminId.match(/\d+$/);
+  adminNumber = match ? parseInt(match[0]) + 1 : 1;
+}
     const adminId = `ADM${adminNumber.toString().padStart(3, "0")}`;
+
 
     // Hash password (required)
     const saltRounds = 10;
