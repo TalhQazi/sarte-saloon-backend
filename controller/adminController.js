@@ -329,9 +329,9 @@ exports.addAdmin = async (req, res) => {
     }
 
     // Generate sequential admin ID
-    const lastAdmin = await Admin.findOne().sort({ adminId: -1 });
+    const lastAdmin = await Admin.findOne().sort({ employeeId: -1 });
     const adminNumber = lastAdmin
-      ? parseInt(lastAdmin.adminId.replace("ADM", "")) + 1
+      ? parseInt(lastAdmin.employeeId.replace("ADM", "")) + 1
       : 1;
     const adminId = `ADM${adminNumber.toString().padStart(3, "0")}`;
 
