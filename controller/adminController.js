@@ -54,10 +54,6 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage: storage,
-  limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB limit
-    files: 1
-  },
   fileFilter: function (req, file, cb) {
     if (file.mimetype.startsWith("image/")) {
       cb(null, true);
@@ -329,15 +325,11 @@ exports.addAdmin = async (req, res) => {
     }
 
     // Generate sequential admin ID
-     const lastAdmin = await Admin.findOne().sort({ adminId: -1 }).lean;
-
-let adminNumber = 1;
-if (lastAdmin && lastAdmin.adminId) {
-  const match = lastAdmin.adminId.match(/\d+$/);
-  adminNumber = match ? parseInt(match[0]) + 1 : 1;
-}
+    const lastAdmin = await Admin.findOne().sort({ adminId: -1 });
+    const adminNumber = lastAdmin
+      ? parseInt(lastAdmin.adminId.replace("ADM", "")) + 1
+      : 1;
     const adminId = `ADM${adminNumber.toString().padStart(3, "0")}`;
-
 
     // Hash password (required)
     const saltRounds = 10;

@@ -149,7 +149,6 @@ const authenticateToken = async (req, res, next) => {
               "✅ [Auth Middleware] Found admin in Employee collection"
             );
             req.user = {
-              _id: user._id,
               adminId: user._id,
               name: user.name,
               role: "admin",
@@ -164,7 +163,6 @@ const authenticateToken = async (req, res, next) => {
           if (user) {
             console.log("✅ [Auth Middleware] Found admin in Admin collection");
             req.user = {
-              _id: user._id,
               adminId: user._id,
               name: user.name,
               role: "admin",
@@ -179,22 +177,12 @@ const authenticateToken = async (req, res, next) => {
           user = await User.findById(userId);
           if (user) {
             console.log("✅ [Auth Middleware] Found user in User collection");
-            if (String(user.role).toLowerCase() === "admin") {
-              req.user = {
-                _id: user._id,
-                adminId: user._id,
-                name: user.username || user.name,
-                role: "admin",
-                email: user.email || user.username,
-              };
-            } else {
-              req.user = {
-                userId: user._id,
-                name: user.username || user.name,
-                role: user.role,
-                email: user.email || user.username,
-              };
-            }
+            req.user = {
+              userId: user._id,
+              name: user.username || user.name,
+              role: user.role,
+              email: user.email || user.username,
+            };
             req.isAuthenticated = true;
             return next();
           }

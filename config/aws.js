@@ -1,17 +1,22 @@
-const { RekognitionClient, DetectFacesCommand, CompareFacesCommand } = require("@aws-sdk/client-rekognition");
+const AWS = require("aws-sdk");
 // Environment variables are provided by the platform
 
-// Configure AWS with modern SDK v3
-const rekognition = new RekognitionClient({
+// Configure AWS with optimized settings
+AWS.config.update({
+  accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+  secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
   region: process.env.AWS_REGION || "us-east-1",
-  credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-  },
-  maxAttempts: 2,
-  requestHandler: {
-    requestTimeout: 10000,
-    connectionTimeout: 5000,
+  maxRetries: 2, // Reduce retries for faster failure
+  timeout: 10000, // 10 second timeout
+});
+
+// Create Rekognition service object with optimized configuration
+const rekognition = new AWS.Rekognition({
+  maxRetries: 2,
+  timeout: 10000,
+  httpOptions: {
+    timeout: 10000,
+    connectTimeout: 5000,
   },
 });
 
@@ -29,8 +34,7 @@ const compareFaces = async (sourceImage, targetImage) => {
       QualityFilter: "NONE", // Skip quality filter for speed
     };
 
-    const command = new CompareFacesCommand(params);
-    const result = await rekognition.send(command);
+    const result = await rekognition.compareFaces(params).promise();
 
     if (result.FaceMatches && result.FaceMatches.length > 0) {
       const similarity = result.FaceMatches[0].Similarity;
@@ -70,8 +74,7 @@ const detectFaces = async (imageBytes) => {
       Attributes: ["DEFAULT"], // Reduced attributes for faster processing
     };
 
-    const command = new DetectFacesCommand(params);
-    const result = await rekognition.send(command);
+    const result = await rekognition.detectFaces(params).promise();
 
     if (result.FaceDetails && result.FaceDetails.length > 0) {
       return {

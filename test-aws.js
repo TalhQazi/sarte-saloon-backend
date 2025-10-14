@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { RekognitionClient, ListCollectionsCommand, DetectFacesCommand, CompareFacesCommand } = require('@aws-sdk/client-rekognition');
+const AWS = require('aws-sdk');
 
 console.log('🚀 Testing AWS Rekognition Integration...\n');
 
@@ -17,14 +17,14 @@ if (!process.env.AWS_ACCESS_KEY_ID || !process.env.AWS_SECRET_ACCESS_KEY) {
   process.exit(1);
 }
 
-// Create Rekognition service object with modern SDK v3
-const rekognition = new RekognitionClient({
-  region: process.env.AWS_REGION || 'us-east-1',
-  credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-  },
+AWS.config.update({
+  accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+  secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+  region: process.env.AWS_REGION || 'us-east-1'
 });
+
+// Create Rekognition service object
+const rekognition = new AWS.Rekognition();
 
 async function testAWSConnection() {
   try {
@@ -34,8 +34,7 @@ async function testAWSConnection() {
     
     // Test 1: List Collections (basic API call)
     console.log('📋 Test 1: Listing Rekognition Collections...');
-    const listCommand = new ListCollectionsCommand({});
-    const collectionsResult = await rekognition.send(listCommand);
+    const collectionsResult = await rekognition.listCollections().promise();
     console.log('✅ Collections API call successful!');
     console.log('Available collections:', collectionsResult.CollectionIds?.length || 0);
     console.log('');
@@ -52,8 +51,7 @@ async function testAWSConnection() {
     };
     
     try {
-      const detectCommand = new DetectFacesCommand(detectParams);
-      const detectResult = await rekognition.send(detectCommand);
+      const detectResult = await rekognition.detectFaces(detectParams).promise();
       console.log('✅ Face Detection API call successful!');
       console.log('Sample image processing:', detectResult.FaceDetails?.length || 0, 'faces detected');
     } catch (detectError) {
@@ -74,8 +72,7 @@ async function testAWSConnection() {
     };
     
     try {
-      const compareCommand = new CompareFacesCommand(compareParams);
-      const compareResult = await rekognition.send(compareCommand);
+      const compareResult = await rekognition.compareFaces(compareParams).promise();
       console.log('✅ Face Comparison API call successful!');
       console.log('API response structure verified');
     } catch (compareError) {
