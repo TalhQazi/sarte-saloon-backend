@@ -5,6 +5,7 @@ const Admin = require("../models/Admin");
 const Manager = require("../models/Manager");
 const cloudinary = require("cloudinary").v2;
 const moment = require("moment-timezone");
+const { notifyAllAdmins } = require("./notificationController");
 
 // Helper function for proper reminder calculation
 const calculateReminderDateTime = (bookingDate, bookingTime) => {
@@ -51,24 +52,18 @@ const createAdvanceBookingReminder = async (booking) => {
   try {
     const reminderDate = new Date(booking.reminderDate);
 
-    const admins = await Admin.find({ isActive: { $ne: false } });
     const managers = await Manager.find({ isActive: { $ne: false } });
 
-    for (const admin of admins) {
-      const notification = new Notification({
-        title: "Advance Booking Reminder",
-        message: `Reminder: Call client ${booking.clientName} (${booking.phoneNumber}) for tomorrow's booking at ${booking.time}`,
-        type: "advance_booking_reminder",
-        recipientType: "admin",
-        recipientId: admin._id,
-        recipientModel: "Admin",
-        relatedEntityType: "advance_booking",
-        relatedEntityId: booking._id,
-        scheduledFor: reminderDate,
-        priority: "high",
-      });
-      await notification.save();
-    }
+    // Notify ALL admins (credential + face-auth)
+    await notifyAllAdmins({
+      title: "Advance Booking Reminder",
+      message: `Reminder: Call client ${booking.clientName} (${booking.phoneNumber}) for tomorrow's booking at ${booking.time}`,
+      type: "advance_booking_reminder",
+      priority: "high",
+      relatedEntityType: "advance_booking",
+      relatedEntityId: booking._id,
+      scheduledFor: reminderDate,
+    });
 
     for (const manager of managers) {
       const notification = new Notification({
@@ -279,6 +274,26 @@ const updateBookingStatus = async (req, res) => {
         .status(404)
         .json({ success: false, message: "Booking not found" });
 
+    // If booking is cancelled, deactivate any scheduled reminder notifications
+    if (status === "cancelled") {
+      try {
+        await Notification.updateMany(
+          {
+            type: "advance_booking_reminder",
+            relatedEntityType: "advance_booking",
+            relatedEntityId: bookingId,
+            isActive: true,
+          },
+          { $set: { isActive: false } }
+        );
+      } catch (notifError) {
+        console.error(
+          "❌ Error deactivating reminder notifications for cancelled booking:",
+          notifError
+        );
+      }
+    }
+
     res.status(200).json({
       success: true,
       message: `Booking status updated to ${status}`,
@@ -349,6 +364,24 @@ const deleteBooking = async (req, res) => {
       return res
         .status(404)
         .json({ success: false, message: "Booking not found" });
+
+    // When a booking is deleted, also deactivate any scheduled reminders for it
+    try {
+      await Notification.updateMany(
+        {
+          type: "advance_booking_reminder",
+          relatedEntityType: "advance_booking",
+          relatedEntityId: bookingId,
+          isActive: true,
+        },
+        { $set: { isActive: false } }
+      );
+    } catch (notifError) {
+      console.error(
+        "❌ Error deactivating reminder notifications for deleted booking:",
+        notifError
+      );
+    }
 
     res.status(200).json({
       success: true,

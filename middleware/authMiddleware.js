@@ -1,16 +1,18 @@
+// Authentication Middleware for Node.js/Express
+
 const jwt = require("jsonwebtoken");
-const Admin = require("../models/Admin");
-const Employee = require("../models/Employee");
-const Manager = require("../models/Manager");
+const Employee = require("../models/Employee"); // ✅ SIRF EMPLOYEE MODEL CHAHIYE
 
 // Enhanced authentication middleware that supports both JWT and face auth tokens
 const authenticateToken = async (req, res, next) => {
   try {
     console.log("🔑 [Auth Middleware] Starting authentication...");
-    console.log("🔑 [Auth Middleware] Headers:", req.headers);
 
     const authHeader = req.headers["authorization"];
-    const token = authHeader && authHeader.split(" ")[1]; // Bearer TOKEN
+    const token =
+      authHeader && authHeader.startsWith("Bearer ")
+        ? authHeader.split(" ")[1]
+        : null;
 
     if (!token) {
       console.log("❌ [Auth Middleware] No token provided");
@@ -24,7 +26,7 @@ const authenticateToken = async (req, res, next) => {
       token.substring(0, 20) + "..."
     );
 
-    // Check if it's a JWT token
+    // --- JWT TOKEN HANDLING ---
     if (token.startsWith("eyJ")) {
       console.log("🔑 [Auth Middleware] Processing JWT token...");
 
@@ -32,76 +34,57 @@ const authenticateToken = async (req, res, next) => {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
         console.log("✅ [Auth Middleware] JWT token valid:", decoded);
 
-        // Check if it's a manager token
-        if (decoded.managerId) {
-          console.log("🔑 [Auth Middleware] Manager token detected");
-          const manager = await Manager.findById(decoded.managerId);
-          if (!manager) {
-            return res.status(401).json({
-              message: "Invalid token. Manager not found.",
-            });
-          }
+        // ✅ Look up user in the correct collection based on token payload
+        let user = null;
+        let roleFromToken = decoded.role;
 
-          if (!manager.isActive) {
-            return res.status(401).json({
-              message: "Account is deactivated. Please contact administrator.",
-            });
-          }
-
-          req.user = {
-            managerId: manager._id,
-            name: manager.name,
-            role: "manager",
-            email: manager.email,
-          };
-          req.manager = manager;
-          req.isAuthenticated = true;
-          return next();
+        if (decoded.employeeId) {
+          user = await Employee.findById(decoded.employeeId);
+        } else if (decoded.managerId) {
+          const Manager = require("../models/Manager");
+          user = await Manager.findById(decoded.managerId);
+        } else if (decoded.adminId) {
+          const Admin = require("../models/Admin");
+          user = await Admin.findById(decoded.adminId);
+        } else if (decoded.userId) {
+          // Fallback to Employee collection for generic userId
+          user = await Employee.findById(decoded.userId);
         }
 
-        // Check if it's an admin token
-        if (decoded.adminId) {
-          console.log("🔑 [Auth Middleware] Admin token detected");
-          console.log(
-            "🔑 [Auth Middleware] Looking up admin with ID:",
-            decoded.adminId
-          );
-          const admin = await Admin.findById(decoded.adminId);
-          if (!admin) {
-            console.log("❌ [Auth Middleware] Admin not found in database");
-            return res.status(401).json({
-              message: "Invalid token. Admin not found.",
-            });
-          }
-
-          console.log("✅ [Auth Middleware] Admin found:", admin.name);
-          req.user = {
-            adminId: admin._id,
-            name: admin.name,
-            role: "admin",
-            email: admin.email,
-          };
-          req.admin = admin;
-          req.isAuthenticated = true;
-          return next();
+        if (!user) {
+          console.log("❌ [Auth Middleware] User not found in database");
+          return res.status(401).json({
+            message: "Invalid token. User not found.",
+          });
         }
 
-        // Fallback for other JWT tokens - ensure adminId is preserved
-        console.log("🔑 [Auth Middleware] Using fallback JWT token handling");
-        console.log("🔑 [Auth Middleware] Decoded token:", decoded);
+        // Determine role: prefer DB value, else token
+        const role = user.role || roleFromToken;
 
-        // If the decoded token has adminId, preserve it in req.user
-        if (decoded.adminId) {
-          req.user = {
-            adminId: decoded.adminId,
-            name: decoded.name,
-            role: decoded.role || "admin",
-            email: decoded.email,
-          };
-        } else {
-          req.user = decoded;
+        // Check for active status only if the field exists and is explicitly false
+        if (Object.prototype.hasOwnProperty.call(user, "isActive") && user.isActive === false) {
+          return res.status(401).json({
+            message: "Account is deactivated. Please contact administrator.",
+          });
         }
+
+        // Standardize the user object
+        req.user = {
+          _id: user._id,
+          role: role,
+          name: user.name || user.username,
+          email: user.email,
+        };
+
+        // Attach based on role
+        if (role === "admin") req.admin = user;
+        if (role === "manager") req.manager = user;
+        if (role === "employee") req.employee = user;
+
         req.isAuthenticated = true;
+        console.log(
+          `✅ [Auth Middleware] JWT authentication successful for role: ${req.user.role}`
+        );
         return next();
       } catch (jwtError) {
         console.log(
@@ -114,82 +97,46 @@ const authenticateToken = async (req, res, next) => {
       }
     }
 
-    // Check if it's a face auth token
+    // --- FACE AUTH TOKEN HANDLING ---
     if (token.startsWith("face_auth_")) {
       console.log("🔑 [Auth Middleware] Processing face auth token...");
 
       try {
-        // Extract admin/manager ID from face auth token
         const parts = token.split("_");
         if (parts.length >= 3) {
           const userId = parts[2];
           console.log("🔑 [Auth Middleware] Extracted user ID:", userId);
 
-          // Try to find manager first
-          let user = await Manager.findById(userId);
+          // ✅ SIRF EMPLOYEE COLLECTION MEIN SEARCH KAREIN
+          const user = await Employee.findById(userId);
+
           if (user) {
-            console.log(
-              "✅ [Auth Middleware] Found manager in Manager collection"
-            );
+            // ✅ ROLE USER KE DATABASE FIELD SE LO
+            const role = user.role; // "admin", "manager", ya "employee"
+
+            console.log(`✅ [Auth Middleware] Found user with role: ${role}`);
+
+            // Standardize the user object
             req.user = {
-              managerId: user._id,
-              name: user.name,
-              role: "manager",
+              _id: user._id,
+              role: role, // ✅ YE ROLE DATABASE SE AAYA
+              name: user.name || user.username,
               email: user.email,
             };
-            req.manager = user;
-            req.isAuthenticated = true;
-            return next();
-          }
 
-          // Try to find admin in Employee collection
-          user = await Employee.findById(userId);
-          if (user && user.role === "admin") {
+            // Attach based on role
+            if (role === "admin") req.admin = user;
+            if (role === "manager") req.manager = user;
+            if (role === "employee") req.employee = user;
+
+            req.isAuthenticated = true;
             console.log(
-              "✅ [Auth Middleware] Found admin in Employee collection"
+              `✅ [Auth Middleware] Face Auth successful for role: ${req.user.role}`
             );
-            req.user = {
-              adminId: user._id,
-              name: user.name,
-              role: "admin",
-              email: user.email || `${user.name.toLowerCase()}@salon.com`,
-            };
-            req.isAuthenticated = true;
             return next();
           }
 
-          // Try to find in Admin collection
-          user = await Admin.findById(userId);
-          if (user) {
-            console.log("✅ [Auth Middleware] Found admin in Admin collection");
-            req.user = {
-              adminId: user._id,
-              name: user.name,
-              role: "admin",
-              email: user.email,
-            };
-            req.isAuthenticated = true;
-            return next();
-          }
-
-          // Try to find in User collection (for general users)
-          const User = require("../models/User");
-          user = await User.findById(userId);
-          if (user) {
-            console.log("✅ [Auth Middleware] Found user in User collection");
-            req.user = {
-              userId: user._id,
-              name: user.username || user.name,
-              role: user.role,
-              email: user.email || user.username,
-            };
-            req.isAuthenticated = true;
-            return next();
-          }
-
-          console.log(
-            "❌ [Auth Middleware] User not found for face auth token. Tried Manager, Employee, Admin, and User collections."
-          );
+          console.log("❌ [Auth Middleware] User not found");
         }
 
         return res.status(401).json({
@@ -206,7 +153,7 @@ const authenticateToken = async (req, res, next) => {
       }
     }
 
-    // Unknown token format
+    // --- UNKNOWN TOKEN FORMAT ---
     console.log("❌ [Auth Middleware] Unknown token format");
     return res.status(401).json({
       message: "Invalid token format",
@@ -225,17 +172,17 @@ const authenticate = authenticateToken;
 // Role authorization middleware
 const authorizeRoles = (...roles) => {
   return (req, res, next) => {
-    if (!req.isAuthenticated) {
+    if (!req.isAuthenticated || !req.user || !req.user.role) {
       return res.status(401).json({
-        message: "Authentication required",
+        message: "Authentication required and user role must be defined",
       });
     }
 
-    const userRole = req.user?.role;
+    const userRole = req.user.role;
     console.log("🔐 [Auth] User role:", userRole);
     console.log("🔐 [Auth] Required roles:", roles);
 
-    if (!userRole || !roles.includes(userRole)) {
+    if (!roles.includes(userRole)) {
       return res.status(403).json({
         message: `Access denied. Required role(s): ${roles.join(", ")}`,
       });
