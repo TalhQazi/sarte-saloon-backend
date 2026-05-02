@@ -8,6 +8,7 @@ const Employee = require("../models/Employee");
 const Admin = require("../models/Admin"); // Admin model (for notifications)
 const Manager = require("../models/Manager"); // Manager model for manager lookup
 const Notification = require("../models/Notification");
+const BusinessSettings = require("../models/BusinessSettings");
 const { notifyAllAdmins } = require("./notificationController");
 
 // Cloudinary configuration
@@ -262,9 +263,20 @@ exports.addAdvanceSalaryRequest = async (req, res) => {
       }
     );
 
-    // Clean up temporary files after successful upload
     cleanupTempImage(req.files.employeeLivePicture[0].path);
     cleanupTempImage(req.files.image[0].path);
+
+    // Get Current Business Day
+    let businessDay = new Date();
+    try {
+      const settings = await BusinessSettings.findOne();
+      if (settings && settings.currentBusinessDay) {
+        businessDay = new Date(settings.currentBusinessDay);
+        console.log("📅 [AdvanceSalary] Using business day from database:", businessDay);
+      }
+    } catch (err) {
+      console.error("❌ [AdvanceSalary] Error fetching business day:", err);
+    }
 
     const advanceSalary = new AdvanceSalary({
       employeeId: employee._id, // Use employee's ObjectId
@@ -274,6 +286,7 @@ exports.addAdvanceSalaryRequest = async (req, res) => {
       image: imageResult.secure_url,
       submittedBy: (req.user && req.user._id) ? req.user._id : undefined,
       submittedByName: (req.user && (req.user.name || req.user.email)) || req.body.employeeName,
+      createdAt: businessDay,
     });
 
     await advanceSalary.save();

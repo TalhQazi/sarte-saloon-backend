@@ -1,5 +1,6 @@
 require("dotenv").config();
 const Client = require("../models/Client");
+const BusinessSettings = require("../models/BusinessSettings");
 const { notifyAllAdmins, notifyAllManagers } = require("./notificationController");
 
 // Add new client
@@ -15,6 +16,18 @@ exports.addClient = async (req, res) => {
     // Normalize phone number
     const normalizedPhone = phoneNumber.replace(/[\s\-\(\)]/g, "");
 
+    // Get Current Business Day
+    let businessDay = new Date();
+    try {
+      const settings = await BusinessSettings.findOne();
+      if (settings && settings.currentBusinessDay) {
+        businessDay = new Date(settings.currentBusinessDay);
+        console.log("📅 [ClientController] Using business day from database:", businessDay);
+      }
+    } catch (err) {
+      console.error("❌ [ClientController] Error fetching business day for client:", err);
+    }
+
     // Check if phone number already exists
     const existingClient = await Client.findOne({
       phoneNumber: { $regex: `^${normalizedPhone}$`, $options: "i" },
@@ -25,7 +38,7 @@ exports.addClient = async (req, res) => {
       const visitId = `VISIT${Date.now()}`;
       const newVisit = {
         visitId,
-        date: new Date(),
+        date: businessDay,
         services: [{ name: "Initial Visit", price: 0 }],
         totalAmount: 0,
         billNumber: `BILL${Date.now()}`,
@@ -36,7 +49,7 @@ exports.addClient = async (req, res) => {
       existingClient.visits.push(newVisit);
       existingClient.totalVisits += 1;
       existingClient.totalSpent += newVisit.totalAmount;
-      existingClient.lastVisit = new Date();
+      existingClient.lastVisit = businessDay;
 
       await existingClient.save();
 
@@ -68,7 +81,7 @@ exports.addClient = async (req, res) => {
     const visitId = `VISIT${Date.now()}`;
     const initialVisit = {
       visitId,
-      date: new Date(),
+      date: businessDay,
       services: [{ name: "Initial Visit", price: 0 }],
       totalAmount: 0,
       billNumber: `BILL${Date.now()}`,
@@ -81,7 +94,7 @@ exports.addClient = async (req, res) => {
       phoneNumber: normalizedPhone,
       totalVisits: 1,
       totalSpent: 0,
-      lastVisit: new Date(),
+      lastVisit: businessDay,
       visits: [initialVisit],
     });
 
@@ -502,10 +515,25 @@ exports.addVisitToClient = async (req, res) => {
         ? visitData.gst
         : undefined;
 
+    // Get Current Business Day
+    let businessDay = new Date();
+    try {
+      const settings = await BusinessSettings.findOne();
+      if (settings && settings.currentBusinessDay) {
+        businessDay = new Date(settings.currentBusinessDay);
+        console.log("📅 [ClientController] Using business day from database (AddVisit):", businessDay);
+      }
+    } catch (err) {
+      console.error("❌ [ClientController] Error fetching business day for visit:", err);
+    }
+
+    // Use date from visitData if provided, otherwise use businessDay
+    const finalVisitDate = visitData.date ? new Date(visitData.date) : businessDay;
+
     // Create new visit including notes and specialist
     const newVisit = {
       visitId,
-      date: new Date(),
+      date: finalVisitDate,
       services: visitData.services || [],
       totalAmount: resolvedTotalAmount,
       billNumber: visitData.billNumber || `BILL${Date.now()}`,
@@ -526,7 +554,7 @@ exports.addVisitToClient = async (req, res) => {
     client.visits.push(newVisit);
     client.totalVisits += 1;
     client.totalSpent += newVisit.totalAmount;
-    client.lastVisit = new Date();
+    client.lastVisit = finalVisitDate;
 
     await client.save();
 

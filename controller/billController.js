@@ -324,12 +324,23 @@ exports.updateBillPayment = async (req, res) => {
     if (paymentMethod) updateData.paymentMethod = paymentMethod;
     if (notes) updateData.notes = notes;
 
-    // Add payment date if status is paid
-    if (paymentStatus === "paid") {
-      updateData.paidAt = new Date();
+    // Get Current Business Day for updates
+    let businessDay = new Date();
+    try {
+      const settings = await BusinessSettings.findOne();
+      if (settings && settings.currentBusinessDay) {
+        businessDay = new Date(settings.currentBusinessDay);
+      }
+    } catch (err) {
+      console.error("Error fetching business day for bill update:", err);
     }
 
-    updateData.updatedAt = new Date();
+    // Add payment date if status is paid
+    if (paymentStatus === "paid") {
+      updateData.paidAt = businessDay;
+    }
+
+    updateData.updatedAt = businessDay;
 
     const bill = await Bill.findByIdAndUpdate(billId, updateData, {
       new: true,
@@ -363,12 +374,23 @@ exports.cancelBill = async (req, res) => {
     const { billId } = req.params;
     const { reason } = req.body;
 
+    // Get Current Business Day for cancellation
+    let businessDay = new Date();
+    try {
+      const settings = await BusinessSettings.findOne();
+      if (settings && settings.currentBusinessDay) {
+        businessDay = new Date(settings.currentBusinessDay);
+      }
+    } catch (err) {
+      console.error("Error fetching business day for bill cancellation:", err);
+    }
+
     const bill = await Bill.findByIdAndUpdate(
       billId,
       {
         paymentStatus: "cancelled",
         notes: reason ? `Cancelled: ${reason}` : "Bill cancelled",
-        updatedAt: new Date(),
+        updatedAt: businessDay,
       },
       { new: true }
     );
