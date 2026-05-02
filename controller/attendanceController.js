@@ -10,6 +10,7 @@ const ManualAttendanceRequest = require("../models/ManualAttendanceRequest");
 const Notification = require("../models/Notification");
 const Admin = require("../models/Admin");
 const AdminAttendance = require("../models/AdminAttendance"); // Added for adminAttendanceCustom
+const BusinessSettings = require("../models/BusinessSettings");
 const { notifyAllAdmins } = require("./notificationController");
 
 // Use os.tmpdir() for temporary files (better for serverless)
@@ -284,8 +285,16 @@ exports.employeeCheckIn = async (req, res) => {
       console.log("⚠️ Could not delete local file:", deleteError.message);
     }
 
-    // Check if attendance already exists for today
-    const today = new Date();
+    // Check if attendance already exists for today (using Business Day)
+    let today = new Date();
+    try {
+      const settings = await BusinessSettings.findOne();
+      if (settings && settings.currentBusinessDay) {
+        today = new Date(settings.currentBusinessDay);
+      }
+    } catch (err) {
+      console.error("Error fetching business day for check-in:", err);
+    }
     today.setHours(0, 0, 0, 0);
 
     let attendance = await Attendance.findOne({
@@ -517,8 +526,16 @@ exports.employeeCheckOut = async (req, res) => {
       console.log("⚠️ Could not delete local file:", deleteError.message);
     }
 
-    // Find today's attendance
-    const today = new Date();
+    // Find today's attendance (using Business Day)
+    let today = new Date();
+    try {
+      const settings = await BusinessSettings.findOne();
+      if (settings && settings.currentBusinessDay) {
+        today = new Date(settings.currentBusinessDay);
+      }
+    } catch (err) {
+      console.error("Error fetching business day for check-out:", err);
+    }
     today.setHours(0, 0, 0, 0);
 
     const attendance = await Attendance.findOne({
