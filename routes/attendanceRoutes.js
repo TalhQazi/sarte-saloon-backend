@@ -9,6 +9,7 @@ const {
   getAllAttendanceRecords,
   markAbsentEmployees,
   adminRecordEmployeeAttendance,
+  deleteAttendanceRecord,
   handleFileUpload,
 } = require("../controller/attendanceController");
 
@@ -46,5 +47,8 @@ router.post(
 
 // Mark Absent Employees (Admin - Daily Task) - requires authentication
 router.post("/mark-absent", authenticateToken, markAbsentEmployees);
+ 
+// Delete Attendance Record (Admin) - requires authentication
+router.delete("/:id", authenticateToken, deleteAttendanceRecord);
 
 module.exports = router;
