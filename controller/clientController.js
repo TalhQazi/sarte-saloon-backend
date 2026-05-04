@@ -516,19 +516,31 @@ exports.addVisitToClient = async (req, res) => {
         : undefined;
 
     // Get Current Business Day
+    // IMPORTANT: We always use the business day from the database as the
+    // single source of truth for the visit's date. Any date that the
+    // frontend sends in `visitData.date` is intentionally ignored to avoid
+    // discrepancies caused by stale frontend state, race conditions, or
+    // timezone drift. This guarantees that the visit (and therefore the
+    // Sales screen filtering) always matches the current business day.
     let businessDay = new Date();
     try {
       const settings = await BusinessSettings.findOne();
       if (settings && settings.currentBusinessDay) {
         businessDay = new Date(settings.currentBusinessDay);
-        console.log("📅 [ClientController] Using business day from database (AddVisit):", businessDay);
+        console.log(
+          "📅 [ClientController] Using business day from database (AddVisit):",
+          businessDay
+        );
+      } else {
+        console.log(
+          "⚠️ [ClientController] No business day found in DB, falling back to system date for visit"
+        );
       }
     } catch (err) {
       console.error("❌ [ClientController] Error fetching business day for visit:", err);
     }
 
-    // Use date from visitData if provided, otherwise use businessDay
-    const finalVisitDate = visitData.date ? new Date(visitData.date) : businessDay;
+    const finalVisitDate = businessDay;
 
     // Create new visit including notes and specialist
     const newVisit = {
@@ -593,6 +605,7 @@ exports.addVisitToClient = async (req, res) => {
       success: true,
       message: "Visit added successfully",
       visit: newVisit,
+      businessDay: finalVisitDate,
       updatedClient: {
         totalVisits: client.totalVisits,
         totalSpent: client.totalSpent,
