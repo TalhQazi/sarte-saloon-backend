@@ -173,6 +173,8 @@ exports.getNotifications = async (req, res) => {
 
     if (type) {
       filter.type = type;
+    } else {
+      filter.type = { $ne: "advance_booking_reminder" };
     }
 
     if (isRead !== undefined) {
@@ -356,6 +358,7 @@ exports.getNotificationCount = async (req, res) => {
     const now = new Date();
     const unreadCount = await Notification.countDocuments({
       recipientId: userId,
+      type: { $ne: "advance_booking_reminder" },
       isRead: false,
       isActive: true,
       $or: [
