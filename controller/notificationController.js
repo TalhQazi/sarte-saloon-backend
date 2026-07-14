@@ -228,26 +228,30 @@ exports.markAsRead = async (req, res) => {
     const userId = req.user.adminId || req.user.managerId || req.user._id;
     const userRole = req.user.role;
 
-    // First try to mark the user's own notification
-    let notification = await Notification.findOne({
+    // Find the active notification
+    const notification = await Notification.findOne({
       _id: notificationId,
-      recipientId: userId,
       isActive: true,
     });
-
-    // If not found and user is admin, allow marking admin-wide notification
-    if (!notification && userRole === "admin") {
-      notification = await Notification.findOne({
-        _id: notificationId,
-        recipientType: "admin",
-        isActive: true,
-      });
-    }
 
     if (!notification) {
       return res.status(404).json({
         success: false,
         message: "Notification not found",
+      });
+    }
+
+    // Verify recipient permissions: matches recipientId OR matches recipientType (admin/manager/both)
+    const isRecipient = String(notification.recipientId) === String(userId);
+    const isRoleMatched =
+      notification.recipientType === "both" ||
+      (notification.recipientType === "admin" && userRole === "admin") ||
+      (notification.recipientType === "manager" && userRole === "manager");
+
+    if (!isRecipient && !isRoleMatched) {
+      return res.status(403).json({
+        success: false,
+        message: "Unauthorized to access this notification",
       });
     }
 
@@ -281,11 +285,31 @@ exports.markAllAsRead = async (req, res) => {
       isActive: true,
     };
 
-    // If admin, include admin-wide notifications
-    const query =
-      userRole === "admin"
-        ? { ...baseQuery, $or: [{ recipientId: userId }, { recipientType: "admin" }] }
-        : { ...baseQuery, recipientId: userId };
+    let query;
+    if (userRole === "admin") {
+      query = {
+        ...baseQuery,
+        $or: [
+          { recipientId: userId },
+          { recipientType: "admin" },
+          { recipientType: "both" },
+        ],
+      };
+    } else if (userRole === "manager") {
+      query = {
+        ...baseQuery,
+        $or: [
+          { recipientId: userId },
+          { recipientType: "manager" },
+          { recipientType: "both" },
+        ],
+      };
+    } else {
+      query = {
+        ...baseQuery,
+        recipientId: userId,
+      };
+    }
 
     await Notification.updateMany(query, { isRead: true });
 
@@ -310,26 +334,30 @@ exports.deleteNotification = async (req, res) => {
     const userId = req.user.adminId || req.user.managerId || req.user._id;
     const userRole = req.user.role;
 
-    // First try to find user's own notification
-    let notification = await Notification.findOne({
+    // Find the active notification
+    const notification = await Notification.findOne({
       _id: notificationId,
-      recipientId: userId,
       isActive: true,
     });
-
-    // If not found and user is admin, allow deleting admin-wide notification
-    if (!notification && userRole === "admin") {
-      notification = await Notification.findOne({
-        _id: notificationId,
-        recipientType: "admin",
-        isActive: true,
-      });
-    }
 
     if (!notification) {
       return res.status(404).json({
         success: false,
         message: "Notification not found",
+      });
+    }
+
+    // Verify recipient permissions: matches recipientId OR matches recipientType (admin/manager/both)
+    const isRecipient = String(notification.recipientId) === String(userId);
+    const isRoleMatched =
+      notification.recipientType === "both" ||
+      (notification.recipientType === "admin" && userRole === "admin") ||
+      (notification.recipientType === "manager" && userRole === "manager");
+
+    if (!isRecipient && !isRoleMatched) {
+      return res.status(403).json({
+        success: false,
+        message: "Unauthorized to access this notification",
       });
     }
 
