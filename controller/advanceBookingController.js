@@ -6,7 +6,6 @@ const Manager = require("../models/Manager");
 const BusinessSettings = require("../models/BusinessSettings");
 const cloudinary = require("cloudinary").v2;
 const moment = require("moment-timezone");
-const { notifyAllAdmins } = require("./notificationController");
 
 // Helper function for proper reminder calculation
 const calculateReminderDateTime = (bookingDate, bookingTime) => {
@@ -53,29 +52,18 @@ const createAdvanceBookingReminder = async (booking) => {
   try {
     const reminderDate = new Date(booking.reminderDate);
 
-    // Notify ALL admins (credential + face-auth)
-    await notifyAllAdmins({
-      title: "Advance Booking Reminder",
-      message: `Reminder: Call client ${booking.clientName} (${booking.phoneNumber}) for tomorrow's booking at ${booking.time}`,
-      type: "advance_booking_reminder",
-      priority: "high",
-      relatedEntityType: "advance_booking",
-      relatedEntityId: booking._id,
-      scheduledFor: reminderDate,
-    });
-
-    // Notify managers with a SINGLE broadcast notification (recipientType: "manager").
-    // We intentionally do not fan out one copy per manager: the Manager > Reminder tab
-    // query matches every recipientType "manager" doc, so per-manager copies would show
-    // as duplicate rows to each manager. One broadcast doc = one row per booking, and it
-    // reaches all managers regardless of how their accounts are stored (Manager or
-    // Employee, with or without an isActive flag).
+    // Create ONE shared reminder for Admin + Manager (recipientType: "both").
+    // Both panels' reminder queries match recipientType "both", so a single doc is
+    // seen by everyone. Because it is one document, reading or deleting it on either
+    // panel updates the reminder for both sides — a booking is a single "call the
+    // client" task that only needs to be handled once. recipientId is null (broadcast),
+    // so this works no matter how admin/manager accounts are stored.
     await Notification.create({
       title: "Advance Booking Reminder",
       message: `Reminder: Call client ${booking.clientName} (${booking.phoneNumber}) for tomorrow's booking at ${booking.time}`,
       type: "advance_booking_reminder",
-      recipientType: "manager",
-      recipientModel: "Manager",
+      recipientType: "both",
+      recipientModel: "Admin", // placeholder only; recipientId is null for a broadcast
       recipientId: null,
       priority: "high",
       relatedEntityType: "advance_booking",
