@@ -387,24 +387,56 @@ exports.deleteNotification = async (req, res) => {
 exports.getNotificationCount = async (req, res) => {
   try {
     const userId = req.user.adminId || req.user.managerId || req.user._id;
-
+    const userRole = req.user.role;
     const now = new Date();
-    const unreadCount = await Notification.countDocuments({
-      recipientId: userId,
-      type: { $ne: "advance_booking_reminder" },
+
+    let baseFilter = {
       isRead: false,
       isActive: true,
-      $or: [
-        { scheduledFor: { $exists: false } },
-        { scheduledFor: null },
-        { scheduledFor: { $lte: now } },
-        { sentAt: { $ne: null } },
+      $and: [
+        {
+          $or: [
+            { scheduledFor: { $exists: false } },
+            { scheduledFor: null },
+            { scheduledFor: { $lte: now } },
+            { sentAt: { $ne: null } },
+          ],
+        },
       ],
+    };
+
+    if (userRole === "admin") {
+      baseFilter.$or = [
+        { recipientId: userId },
+        { recipientType: "admin" },
+        { recipientType: "both" },
+      ];
+    } else if (userRole === "manager") {
+      baseFilter.$or = [
+        { recipientId: userId },
+        { recipientType: "manager" },
+        { recipientType: "both" },
+      ];
+    } else {
+      baseFilter.recipientId = userId;
+    }
+
+    // 1. Count general notifications (excluding advance_booking_reminder)
+    const unreadCount = await Notification.countDocuments({
+      ...baseFilter,
+      type: { $ne: "advance_booking_reminder" },
+    });
+
+    // 2. Count reminders (specifically advance_booking_reminder)
+    const unreadRemindersCount = await Notification.countDocuments({
+      ...baseFilter,
+      type: "advance_booking_reminder",
     });
 
     res.status(200).json({
       success: true,
       unreadCount,
+      unreadRemindersCount,
     });
   } catch (error) {
     console.error("Error getting notification count:", error);

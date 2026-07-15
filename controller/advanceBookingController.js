@@ -6,7 +6,7 @@ const Manager = require("../models/Manager");
 const BusinessSettings = require("../models/BusinessSettings");
 const cloudinary = require("cloudinary").v2;
 const moment = require("moment-timezone");
-const { notifyAllAdmins } = require("./notificationController");
+const { notifyAllAdmins, notifyAllManagers } = require("./notificationController");
 
 // Helper function for proper reminder calculation
 const calculateReminderDateTime = (bookingDate, bookingTime) => {
@@ -53,8 +53,6 @@ const createAdvanceBookingReminder = async (booking) => {
   try {
     const reminderDate = new Date(booking.reminderDate);
 
-    const managers = await Manager.find({ isActive: { $ne: false } });
-
     // Notify ALL admins (credential + face-auth)
     await notifyAllAdmins({
       title: "Advance Booking Reminder",
@@ -66,21 +64,16 @@ const createAdvanceBookingReminder = async (booking) => {
       scheduledFor: reminderDate,
     });
 
-    for (const manager of managers) {
-      const notification = new Notification({
-        title: "Advance Booking Reminder",
-        message: `Reminder: Call client ${booking.clientName} (${booking.phoneNumber}) for tomorrow's booking at ${booking.time}`,
-        type: "advance_booking_reminder",
-        recipientType: "manager",
-        recipientId: manager._id,
-        recipientModel: "Manager",
-        relatedEntityType: "advance_booking",
-        relatedEntityId: booking._id,
-        scheduledFor: reminderDate,
-        priority: "high",
-      });
-      await notification.save();
-    }
+    // Notify ALL managers (credential + face-auth)
+    await notifyAllManagers({
+      title: "Advance Booking Reminder",
+      message: `Reminder: Call client ${booking.clientName} (${booking.phoneNumber}) for tomorrow's booking at ${booking.time}`,
+      type: "advance_booking_reminder",
+      priority: "high",
+      relatedEntityType: "advance_booking",
+      relatedEntityId: booking._id,
+      scheduledFor: reminderDate,
+    });
   } catch (error) {
     console.error("❌ Error creating advance booking reminder:", error);
   }
