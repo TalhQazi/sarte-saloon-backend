@@ -405,8 +405,27 @@ exports.getNotificationCount = async (req, res) => {
       ],
     };
 
+    let baseFilterWithoutIsRead = {
+      isActive: true,
+      $and: [
+        {
+          $or: [
+            { scheduledFor: { $exists: false } },
+            { scheduledFor: null },
+            { scheduledFor: { $lte: now } },
+            { sentAt: { $ne: null } },
+          ],
+        },
+      ],
+    };
+
     if (userRole === "admin") {
       baseFilter.$or = [
+        { recipientId: userId },
+        { recipientType: "admin" },
+        { recipientType: "both" },
+      ];
+      baseFilterWithoutIsRead.$or = [
         { recipientId: userId },
         { recipientType: "admin" },
         { recipientType: "both" },
@@ -417,8 +436,14 @@ exports.getNotificationCount = async (req, res) => {
         { recipientType: "manager" },
         { recipientType: "both" },
       ];
+      baseFilterWithoutIsRead.$or = [
+        { recipientId: userId },
+        { recipientType: "manager" },
+        { recipientType: "both" },
+      ];
     } else {
       baseFilter.recipientId = userId;
+      baseFilterWithoutIsRead.recipientId = userId;
     }
 
     // 1. Count general notifications (excluding advance_booking_reminder)
@@ -427,9 +452,9 @@ exports.getNotificationCount = async (req, res) => {
       type: { $ne: "advance_booking_reminder" },
     });
 
-    // 2. Count reminders (specifically advance_booking_reminder)
+    // 2. Count reminders (specifically advance_booking_reminder, both read and unread)
     const unreadRemindersCount = await Notification.countDocuments({
-      ...baseFilter,
+      ...baseFilterWithoutIsRead,
       type: "advance_booking_reminder",
     });
 
