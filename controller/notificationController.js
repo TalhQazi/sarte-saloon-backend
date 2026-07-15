@@ -278,12 +278,17 @@ exports.markAllAsRead = async (req, res) => {
   try {
     const userId = req.user.adminId || req.user.managerId || req.user._id;
     const userRole = req.user.role;
+    const { type } = req.query;
 
     // Base query for this user
     const baseQuery = {
       isRead: false,
       isActive: true,
     };
+
+    if (type) {
+      baseQuery.type = type;
+    }
 
     let query;
     if (userRole === "admin") {
