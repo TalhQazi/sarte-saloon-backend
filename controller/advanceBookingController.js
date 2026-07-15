@@ -6,7 +6,7 @@ const Manager = require("../models/Manager");
 const BusinessSettings = require("../models/BusinessSettings");
 const cloudinary = require("cloudinary").v2;
 const moment = require("moment-timezone");
-const { notifyAllAdmins, notifyAllManagers } = require("./notificationController");
+const { notifyAllAdmins } = require("./notificationController");
 
 // Helper function for proper reminder calculation
 const calculateReminderDateTime = (bookingDate, bookingTime) => {
@@ -64,11 +64,19 @@ const createAdvanceBookingReminder = async (booking) => {
       scheduledFor: reminderDate,
     });
 
-    // Notify ALL managers (credential + face-auth)
-    await notifyAllManagers({
+    // Notify managers with a SINGLE broadcast notification (recipientType: "manager").
+    // We intentionally do not fan out one copy per manager: the Manager > Reminder tab
+    // query matches every recipientType "manager" doc, so per-manager copies would show
+    // as duplicate rows to each manager. One broadcast doc = one row per booking, and it
+    // reaches all managers regardless of how their accounts are stored (Manager or
+    // Employee, with or without an isActive flag).
+    await Notification.create({
       title: "Advance Booking Reminder",
       message: `Reminder: Call client ${booking.clientName} (${booking.phoneNumber}) for tomorrow's booking at ${booking.time}`,
       type: "advance_booking_reminder",
+      recipientType: "manager",
+      recipientModel: "Manager",
+      recipientId: null,
       priority: "high",
       relatedEntityType: "advance_booking",
       relatedEntityId: booking._id,
