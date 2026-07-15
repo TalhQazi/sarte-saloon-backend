@@ -33,7 +33,7 @@ async function notifyAllAdmins(notificationData) {
 
     // 2️⃣ Get ALL face auth admins from Employee collection
     const faceAuthAdmins = await Employee.find({
-      role: "admin",
+      role: { $regex: /^admin$/i },
       isActive: true,
     });
 
@@ -75,7 +75,7 @@ async function notifyAllManagers(notificationData) {
     const notifications = [];
 
     // 1️⃣ Get credential manager(s) from Manager collection
-    const managers = await Manager.find({});
+    const managers = await Manager.find({ isActive: { $ne: false } });
     if (managers && managers.length > 0) {
       managers.forEach((mgr) => {
         notifications.push({
@@ -89,7 +89,7 @@ async function notifyAllManagers(notificationData) {
     }
 
     // 2️⃣ Get face auth managers from Employee collection
-    const faceAuthManagers = await Employee.find({ role: "manager", isActive: true });
+    const faceAuthManagers = await Employee.find({ role: { $regex: /^manager$/i }, isActive: true });
     if (faceAuthManagers && faceAuthManagers.length > 0) {
       faceAuthManagers.forEach((m) => {
         notifications.push({
@@ -134,7 +134,7 @@ exports.getNotifications = async (req, res) => {
     });
 
     const userId = req.user.adminId || req.user.managerId || req.user._id;
-    const userRole = req.user.role;
+    const userRole = String(req.user.role || "").toLowerCase();
 
     console.log("🔔 [Notifications] Final user ID:", userId);
     console.log("🔔 [Notifications] User role:", userRole);
@@ -387,7 +387,7 @@ exports.deleteNotification = async (req, res) => {
 exports.getNotificationCount = async (req, res) => {
   try {
     const userId = req.user.adminId || req.user.managerId || req.user._id;
-    const userRole = req.user.role;
+    const userRole = String(req.user.role || "").toLowerCase();
     const now = new Date();
 
     let baseFilter = {
